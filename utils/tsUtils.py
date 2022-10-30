@@ -1,8 +1,9 @@
 import numpy as np
 import pandas as pd
-from statsmodels.nonparametric import smoothers_lowess
+from statsmodels.tsa.seasonal import seasonal_decompose, STL
 import datetime
-
+import statsmodels.api as sm
+from itertools import chain
 
 def boxplot_wash(data):
     """
@@ -26,7 +27,6 @@ def boxplot_wash(data):
     # 替换逻辑过程
     new_data = list(map(lambda x: _substitude_logic(data=x, up_value=upper_bound, down_value=lower_bound), data))
     return new_data
-
 
 def extract_daily_waveline(time_list, data_list):
     """
@@ -53,7 +53,143 @@ def extract_daily_waveline(time_list, data_list):
     wave_list = np.mean(selected_value, axis=0).reshape((-1)).tolist()
 
     return wave_list
-    
+
+def seasonal_lowess(data, period, def_bandwidth=0.3, coefficient=-2.0, max_bandwidth=0.75):
+    """
+    :param data:
+    :param period:
+    :param def_bandwidth:
+    :param def_multiplier:
+    :param max_bandwidth:
+    :return:
+    """
+    data_length = len(data)
+    if period > 0:
+        bandwidth = max_bandwidth if (period * coefficient / data_length) else (period * coefficient / data_length)
+    else:
+        bandwidth = def_bandwidth
+    x_list = list(range(data_length))
+    lowess = sm.nonparametric.lowess
+    lowess_value = lowess(data, x_list, frac=bandwidth)[:, -1].reshape((-1)).tolist()
+    return lowess_value
+
+def subsequence_function(data, index_location, period_num, debug=False):
+    """
+    每个周期位置的信息
+    :param data: 数据list
+    :param index_location: 指标位置
+    :param period_num: 周其大小
+    :param debug: 是否debug
+    :return: 返回每个周期波形位置的信息
+    """
+    data_length = len(data)
+    repeated_time, residual_value = data_length // period_num, data_length % period_num
+    idx_list = list(map(lambda x: x * period_num + index_location, range(repeated_time)))
+    if (index_location + 1) <= residual_value:
+        idx_list.append(repeated_time * period_num + index_location)
+
+    selected_data = list(map(lambda x: data[x], idx_list))
+    total_length = len(idx_list)
+    average_value = np.sum(selected_data) / total_length
+    if debug:
+        print(f"[Information] 全部长度是: {total_length}")
+        print(f"[Information] 选择的指标值是: {idx_list}")
+        print(f"[Information] 选择的数据list是: {selected_data}")
+    return {"selected_data": selected_data, "selected_length": total_length, "average_value": average_value}
+
+def ma_seasonality(data, period):
+    """
+    :param data:
+    :param period:
+    :return:
+    """
+    if period <= 0:
+        return list(range(len(data)))
+    else:
+        period_pair = list(map(lambda x: subsequence_function(data=data, index_location=x, period_num=period), range(period)))
+        result_list = list(map(lambda x: x["average_value"], period_pair))
+        total_mean = np.sum(result_list) / period
+        final_result_list = list(map(lambda x: x - total_mean, result_list))
+        return final_result_list
+
+def seasonality_copy(data, total_length, period):
+    """
+    :param data:
+    :param total_length:
+    :param period:
+    :return:
+    """
+    repeated_time, residual_value = total_length // period, total_length % period
+    repeated_period_temp = list(map(lambda x: data, range(repeated_time)))
+    repeated_period = list(chain(*repeated_period_temp))
+    result_period = repeated_period + data[:residual_value]
+    return result_period
+
+def remove_seasonality(data, period, debug=False):
+    """
+    :param data_list:
+    :param period:
+    :param debug_flag:
+    :return:
+    """
+
+    data_length = len(data)
+    trend = seasonal_lowess(data=data, period=period)
+    detrend = list(map(lambda x, y: x - y, data, trend))
+    one_period = ma_seasonality(data=detrend, period=period)
+    seasonal = seasonality_copy(data=one_period, total_length=data_length, period=period)
+    residual = list(map(lambda x, y: x - y, detrend, seasonal))
+    if debug:
+        return (residual, seasonal)
+    else:
+        return residual
+
+def seasonality_wave(data, period, bandwidth=1.0/3.0):
+    """
+    :param data:
+    :param period:
+    :param bandwidth:
+    :return:
+    """
+    data_new = boxplot_wash(data=data)
+    start_number = len(data) % period
+    period_wave = list(map(lambda x: subsequence_function(data=data_new[start_number:],
+                                                          index_location=x,
+                                                          period_num=period,
+                                                          debug=False)["average_value"], range(period)))
+    lowess_estimator = sm.nonparametric.lowess
+    smoothed_value = lowess_estimator(period_wave, list(range(len(period_wave))), frac=bandwidth)[:, 1].reshape((-1)).tolist()
+    if len(smoothed_value) == len(period_wave):
+        period_wave = smoothed_value
+
+    repeated_period_temp = list(map(lambda x: period_wave, range(len(data)//period)))
+    repeated_period = list(chain(*repeated_period_temp))
+    result_list = period_wave[-(len(data) - len(repeated_period)):] + repeated_period
+    return result_list
+
+def run_lowess_trend(observation, use_boxplot, period, bandwidth):
+    """
+    :param observation:
+    :param use_boxplot:
+    :param period:
+    :param bandwidth:
+    :return:
+    """
+    data_length = len(observation)
+    temp_result = boxplot_wash(data=observation) if use_boxplot else observation
+    lowess_estimator = sm.nonparametric.lowess
+    x_list = list(range(data_length))
+    if period >0:
+        de_seasonal_result = remove_seasonality(data=temp_result, period=period,)
+        lowess_value = lowess_estimator(de_seasonal_result, x_list, frac=bandwidth)[:, 1].reshape((-1)).tolist()
+    else:
+        lowess_value = lowess_estimator(temp_result, x_list, frac=bandwidth)[:, 1].reshape((-1)).tolist()
+
+    return lowess_value
+
+def smoothBaseline(data_list, fraction):
+    lowess = sm.nonparametric.lowess
+    return np.nan
 
 
 if __name__ == "__main__":
