@@ -4,6 +4,7 @@ from statsmodels.tsa.seasonal import seasonal_decompose, STL
 import datetime
 import statsmodels.api as sm
 from itertools import chain
+import json
 
 def boxplot_wash(data):
     """
@@ -43,8 +44,6 @@ def extract_daily_waveline(time_list, data_list):
     delta_days = (end_date - start_date).days
     start_date_str = datetime.datetime.strftime(start_date, "%Y-%m-%d")
     end_date_str = datetime.datetime.strftime(end_date, "%Y-%m-%d")
-
-
 
     total_dataframe = pd.DataFrame(data={"time": time_list, "data": data_list})
     selected_dataframe = total_dataframe[(total_dataframe['time']>=datetime.datetime.strptime(start_date_str, "%Y-%m-%d"))
@@ -179,7 +178,7 @@ def run_lowess_trend(observation, use_boxplot, period, bandwidth):
     temp_result = boxplot_wash(data=observation) if use_boxplot else observation
     lowess_estimator = sm.nonparametric.lowess
     x_list = list(range(data_length))
-    if period >0:
+    if period > 0:
         de_seasonal_result = remove_seasonality(data=temp_result, period=period,)
         lowess_value = lowess_estimator(de_seasonal_result, x_list, frac=bandwidth)[:, 1].reshape((-1)).tolist()
     else:
@@ -187,9 +186,35 @@ def run_lowess_trend(observation, use_boxplot, period, bandwidth):
 
     return lowess_value
 
-def smoothBaseline(data_list, fraction):
-    lowess = sm.nonparametric.lowess
-    return np.nan
+
+def extract_one_day_wave(past_dataframe, last_week):
+    """
+    :param past_dataframe: 过去的dataframe 全量数据也可以
+    :param last_week: 要拿走完整的几周数据
+    :return: 一个周期波形的dict {0: 0.73737677, 10: 0.7808410607142857, 20: 0.677642615, 30: 0.589311462142857, ...., }每天绝对时间对应地波形大小
+    """
+    past_dataframe = past_dataframe.sort_values(by=["time"], ascending=[True])
+
+    # 完整两周数据
+    upper_date = past_dataframe.at[past_dataframe.shape[0] - 1, "time"] - pd.to_timedelta(1, unit="day")
+    lower_date = upper_date - pd.to_timedelta(int(last_week * 7), unit="days") + pd.to_timedelta(10, unit="minute")
+
+    # 完整两周dataframe
+    past_dataframe = past_dataframe[
+        (past_dataframe['time'] >= lower_date) & (past_dataframe['time'] <= upper_date)].sort_values(by=["time"],
+                                                                                                     ascending=[
+                                                                                                         True]).reset_index(
+        drop=True)
+
+    # 提取完整两周波形作弊表
+    new_waveline = past_dataframe["label"].values.reshape((int(last_week * 7), 144))
+    wave_list = np.mean(new_waveline, axis=0)
+
+    # 结果的json
+    time_list = list(map(lambda x: x * 10, range(144)))
+    result_json = json.dumps(dict(zip(time_list, wave_list)), ensure_ascii=False)
+
+    return result_json
 
 
 if __name__ == "__main__":
