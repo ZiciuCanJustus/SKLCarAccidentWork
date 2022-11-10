@@ -62,9 +62,7 @@ def extract_one_day_wave(past_dataframe, last_week):
 
 def extract_wave_line(sample, last_week_number):
     label_list = sample["y"]
-
-    start_time_datetime = datetime.datetime.strptime(sample["start"], "%Y-%m-%d %H:%M:%S")
-    time_index = list(map(lambda x: start_time_datetime + x * datetime.timedelta(minutes=10), range(len(label_list))))
+    time_index = generate_time_list(start_time=sample["start"], time_length=len(label_list), min_freq=10)
     new_dataframe = pd.DataFrame({"time": time_index, "label": label_list})
     temp_dict = extract_one_day_wave(past_dataframe=new_dataframe, last_week=last_week_number)
     return temp_dict
@@ -74,10 +72,22 @@ def item_residual(value, minute_number, cheat_dict):
     return value - cheat_dict[str(minute_number)]
 
 
+def generate_time_list(start_time, time_length, min_freq=10):
+    """
+    :param start_time: 起始时间, "%Y-%m-%d %H:%M:%S", string
+    :param time_length: 要多长
+    :param min_freq: 采样粒度多高
+    :return: list(String)
+    """
+    start_time_datetime = datetime.datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S")
+    time_index = list(map(lambda x: start_time_datetime + x * datetime.timedelta(minutes=min_freq), range(time_length)))
+    return time_index
+
+
 def generate_residual(sample, wave_json):
     label_list = sample["y"]
-    start_time_datetime = datetime.datetime.strptime(sample["start"], "%Y-%m-%d %H:%M:%S")
-    time_index = list(map(lambda x: start_time_datetime + x * datetime.timedelta(minutes=10), range(len(label_list))))
+
+    time_index = generate_time_list(start_time=sample["start"], time_length=len(label_list), min_freq=10)
 
     new_dataframe = pd.DataFrame({"time": time_index, "label": label_list})
     new_dataframe["minute_value"] = new_dataframe['time'].apply(lambda x: x.minute)
@@ -116,6 +126,10 @@ def preprocess_outlier_data(sample, residual_substitude, last_week_number=2):
 
 if __name__ == "__main__":
 
+    """
+    测试json文件的读取, 以及我们读取的情况
+    """
+
     import os
 
     data_path = os.path.abspath(os.path.join(os.getcwd(), "../..")) + "\data\\train.jsonl"
@@ -132,8 +146,9 @@ if __name__ == "__main__":
             # print(sample)
             new_sample = preprocess_outlier_data(sample=sample, residual_substitude=False, last_week_number=2)
             train_samples.append(new_sample)
-            # if iter_times >= 1:
-            #     pass
+            print(f"[Info] Iter times {iter_times}")
+            if iter_times == 2:
+                break
 
     print("处理完毕")
-    # print(train_samples[0])
+    print(train_samples[0])
