@@ -1,21 +1,22 @@
 import os
-import jsonlines
 import json
 import numpy as np
 import pandas as pd
-import datetime
+
 
 def process_nan(x):
     if np.isnan(x):
         return 0.0
     else:
-       return x
+        return float(x)
+
 
 def boxplot_wash(data):
     """
     :param data: 一条数据 list[]
     :return: 清洗好的boxplot
     """
+
     def _substitude_logic(data, up_value, down_value):
         if (data < up_value) & (data > down_value):
             return data
@@ -23,6 +24,7 @@ def boxplot_wash(data):
             return up_value
         elif data < down_value:
             return down_value
+
     # 分位数结果
     quantile_75, quantile_25 = np.quantile(data, q=0.75), np.quantile(data, q=0.25)
     iqr = quantile_75 - quantile_25
@@ -34,6 +36,7 @@ def boxplot_wash(data):
     new_data = list(map(lambda x: _substitude_logic(data=x, up_value=upper_bound, down_value=lower_bound), data))
     return new_data
 
+
 def extract_one_day_wave(past_dataframe, last_week):
     """
     :param past_dataframe: 过去的dataframe 全量数据也可以
@@ -43,11 +46,15 @@ def extract_one_day_wave(past_dataframe, last_week):
     past_dataframe = past_dataframe.sort_values(by=["time"], ascending=[True])
 
     # 完整两周数据
-    upper_date = past_dataframe.at[past_dataframe.shape[0] - 1, "time"] - datetime.timedelta(days=1)
-    lower_date = upper_date - + datetime.timedelta(days=int(last_week * 7)) + datetime.timedelta(minutes=1)
+    upper_date = past_dataframe.at[past_dataframe.shape[0] - 1, "time"] - pd.to_timedelta(1, unit="day")
+    lower_date = upper_date - pd.to_timedelta(int(last_week * 7), unit="days") + pd.to_timedelta(10, unit="minute")
 
     # 完整两周dataframe
-    past_dataframe = past_dataframe[(past_dataframe['time']>=lower_date) & (past_dataframe['time']<=upper_date)].sort_values(by=["time"], ascending=[True]).reset_index(drop=True)
+    past_dataframe = past_dataframe[
+        (past_dataframe['time'] >= lower_date) & (past_dataframe['time'] <= upper_date)].sort_values(by=["time"],
+                                                                                                     ascending=[
+                                                                                                         True]).reset_index(
+        drop=True)
 
     # 提取完整两周波形作弊表
     new_waveline = past_dataframe["label"].values.reshape((int(last_week * 7), 144))
@@ -62,7 +69,8 @@ def extract_one_day_wave(past_dataframe, last_week):
 
 def extract_wave_line(sample, last_week_number):
     label_list = sample["y"]
-    time_index = generate_time_list(start_time=sample["start"], time_length=len(label_list), min_freq=10)
+    start_time_pd = pd.to_datetime(sample["start"], format="%Y-%m-%d %H:%M:%S")
+    time_index = list(map(lambda x: start_time_pd + pd.to_timedelta(10 * x, unit="minute"), range(len(label_list))))
     new_dataframe = pd.DataFrame({"time": time_index, "label": label_list})
     temp_dict = extract_one_day_wave(past_dataframe=new_dataframe, last_week=last_week_number)
     return temp_dict
@@ -72,23 +80,10 @@ def item_residual(value, minute_number, cheat_dict):
     return value - cheat_dict[str(minute_number)]
 
 
-def generate_time_list(start_time, time_length, min_freq=10):
-    """
-    :param start_time: 起始时间, "%Y-%m-%d %H:%M:%S", string
-    :param time_length: 要多长
-    :param min_freq: 采样粒度多高
-    :return: list(String)
-    """
-    start_time_datetime = datetime.datetime.strptime(start_time, "%Y-%m-%d %H:%M:%S")
-    time_index = list(map(lambda x: start_time_datetime + x * datetime.timedelta(minutes=min_freq), range(time_length)))
-    return time_index
-
-
 def generate_residual(sample, wave_json):
     label_list = sample["y"]
-
-    time_index = generate_time_list(start_time=sample["start"], time_length=len(label_list), min_freq=10)
-
+    start_time_pd = pd.to_datetime(sample["start"], format="%Y-%m-%d %H:%M:%S")
+    time_index = list(map(lambda x: start_time_pd + pd.to_timedelta(10 * x, unit="minute"), range(len(label_list))))
     new_dataframe = pd.DataFrame({"time": time_index, "label": label_list})
     new_dataframe["minute_value"] = new_dataframe['time'].apply(lambda x: x.minute)
 
@@ -101,12 +96,8 @@ def generate_residual(sample, wave_json):
     return new_dataframe["residual_value"].values.reshape((-1)).tolist()
 
 
-
 def preprocess_outlier_data(sample, residual_substitude, last_week_number=2):
-
     value_list = sample["y"]
-
-    # print(value_list)
     # 标签信息处理nan
     value_list = list(map(lambda x: process_nan(x), value_list))
 
@@ -117,38 +108,62 @@ def preprocess_outlier_data(sample, residual_substitude, last_week_number=2):
     if residual_substitude:
         # 预处理时间的东西
         wave_dict_value = extract_wave_line(sample=sample, last_week_number=last_week_number)
-
         sample["y"] = generate_residual(sample=sample, wave_json=wave_dict_value)
 
     return sample
 
 
+def sample_train_validate(sample, validation_length, box_plot):
+    """
+    :param sample: 一个读取的sample样本
+    :param predict_length: 预测的长度
+    :return:
+    """
+
+    if box_plot:
+        sample = preprocess_outlier_data(sample=sample, residual_substitude=False, last_week_number=2)
+
+    start_time = sample["start"]
+    value_list = sample["y"]
+
+
+
+    # 名字命名
+    app_id, zone_id, item_id = sample["app_id"], sample["zone_id"], sample["item_id"]
+
+    # 训练集&测试集时间长短
+    train_value_list = value_list[:-validation_length]
+    valid_value_list = value_list
+
+    # 字典dict
+    train_dict, valid_dict = dict(), dict()
+
+    # 共有函数
+    # train_dict["app_id"], train_dict["zone_id"], train_dict["item_id"], train_dict["start"] = f'app_{app_id}', f'zone_{zone_id}', f'item_{item_id}', start_time
+    # valid_dict["app_id"], valid_dict["zone_id"], valid_dict["item_id"], valid_dict["start"] = f'app_{app_id}', f'zone_{zone_id}', f'item_{item_id}', start_time
+
+    # 不搞embedding那一套, 直接干活
+    train_dict["app_id"], train_dict["zone_id"], train_dict["item_id"], train_dict["start"] = app_id, zone_id, item_id, start_time
+    valid_dict["app_id"], valid_dict["zone_id"], valid_dict["item_id"], valid_dict["start"] = app_id, zone_id, item_id, start_time
+
+    # 各自函数
+    train_dict["y"], valid_dict["y"] = train_value_list, valid_value_list
+    return train_dict, valid_dict
+
+
+
+def construct_cheat_dict(result_list):
+    """
+    :param result_list:转换作弊表
+    :return:一个作弊字典
+    """
+    # 升序排序
+    new_list = sorted(result_list, reverse=False)
+    # 作弊表构建
+    embedding_idx = list(range(len(result_list)))
+    cheat_sheet = dict(zip(new_list, embedding_idx))
+    return cheat_sheet
+
 
 if __name__ == "__main__":
-
-    """
-    测试json文件的读取, 以及我们读取的情况
-    """
-
-    import os
-
-    data_path = os.path.abspath(os.path.join(os.getcwd(), "../..")) + "\data\\train.jsonl"
-    print(data_path)
-    iter_times = 0
-
-    train_samples = []
-
-    with open(data_path) as f:
-        for line in f:
-            sample = json.loads(line)
-            iter_times = iter_times + 1
-            # train_samples.append(sample)
-            # print(sample)
-            new_sample = preprocess_outlier_data(sample=sample, residual_substitude=False, last_week_number=2)
-            train_samples.append(new_sample)
-            print(f"[Info] Iter times {iter_times}")
-            if iter_times == 2:
-                break
-
-    print("处理完毕")
-    print(train_samples[0])
+    print("[Info] we are doing data!")
