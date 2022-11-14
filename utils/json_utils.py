@@ -126,14 +126,12 @@ def sample_train_validate(sample, validation_length, box_plot):
     start_time = sample["start"]
     value_list = sample["y"]
 
-
-
     # 名字命名
     app_id, zone_id, item_id = sample["app_id"], sample["zone_id"], sample["item_id"]
 
     # 训练集&测试集时间长短
     train_value_list = value_list[:-validation_length]
-    valid_value_list = value_list
+    valid_value_list = value_list[-validation_length:]
 
     # 字典dict
     train_dict, valid_dict = dict(), dict()
