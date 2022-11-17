@@ -13,7 +13,7 @@ from gluonts.torch.model.predictor import PyTorchPredictor
 # import torch.distributed as dist
 import numpy as np
 import datetime
-from utils.json_utils import sample_train_validate, construct_cheat_dict
+from utils.json_utils import sample_train_validate, construct_cheat_dict, process_nan
 from sklearn.preprocessing import LabelEncoder
 from pts.modules import StudentTOutput, StudentTMixtureOutput
 device = torch.device("cuda:4" if torch.cuda.is_available() else "cpu")

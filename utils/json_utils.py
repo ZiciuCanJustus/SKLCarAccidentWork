@@ -6,6 +6,7 @@ import pandas as pd
 
 def process_nan(x):
     if np.isnan(x):
+        print("[Info] 处理掉了nan函数")
         return 0.0
     else:
         return float(x)

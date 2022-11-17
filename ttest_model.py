@@ -6,7 +6,7 @@ import os
 import json
 
 import datetime
-
+import sys
 
 
 def construct_test_sample(sample, last_start, remain_length, predict_length):
@@ -69,8 +69,10 @@ if __name__ == "__main__":
             test_sample_list.append(request_dict)
             label_list.append(real_label)
 
-            if iter_times >= 10:
-                break
+            sys.exit(0)
+
+            # if iter_times >= 10:
+            #     break
 
     print("[Info] We succeed finished!")
 
