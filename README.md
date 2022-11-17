@@ -6,13 +6,33 @@
 * 再次是良好的代码处理链路, 不然队友之间合作很不好合作。代码一定要凸显抽象类和层次性, **写好本地测试文件，如果他官方要求交docker**
 * 最后就是一定要留够充分的时间，比赛前期我被抓去**解决重大战略需求**，比赛后期队友被抓去**解决重大战略需求**，我们真正开始搞这个比赛的时间不是特别多，所以时间比较紧凑，最后几天干通宵去摸代码、交文件去摸奖
 
-## 技术支持
+## 前处理链路
 * 深度学习模型, **官方给出的demon可能不是特别简洁、明了、乃至代码是一坨shit**，但是可以从这里理解比赛代码的执行逻辑。
 这个时候建议把自己的链路, 从dataset到dataloader按照自己的习惯写一遍，保留抽象类的特点，不然**后面可能坑队友**
 官方代码文件:
 接下来进行示例说明：
 ```python
-   
+from typing import Dict, List
+import json
+from gluonts.dataset.common import ListDataset
+import subprocess
+from gluonts.dataset.field_names import FieldName
+from typing import Callable, Iterable, Iterator, List
+import torch
+from pts.model.deepar import DeepAREstimator
+from pts.model.lstnet import LSTNetEstimator
+from pts.model.n_beats import NBEATSEstimator
+
+from pts import Trainer
+import os
+from pathlib import Path
+from gluonts.torch.model.predictor import PyTorchPredictor
+# import torch.distributed as dist
+import numpy as np
+import datetime
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 class AlgSolution():
     def __init__(self):
         pass
@@ -299,5 +319,6 @@ def construct_dataset(sample_list, cate_list, item_list, app_list, zone_list, de
 * former模型自己训练可能比较难顶，所以我们线上只滚了3个epoch就把model送去serving了
 
 # 别的队伍刷高分的操作
+等我搜到他们的代码再去继续学习一下，我没拿到，有点尴尬
 * 简单模型，直接nn拟合数据+embedding就完事儿了
-* 模型没有太复杂。
+* dataset重写了更简洁
