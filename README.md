@@ -309,7 +309,8 @@ def construct_dataset(sample_list, cate_list, item_list, app_list, zone_list, de
     return newDataset, scaler_dict, unique_element
 
 ```
-
+这里我强烈建议大家去copy这个[TFT的代码仓库](https://github.com/KalleBylin/temporal-fusion-transformers)
+里面那个dataset的写法，能简单很多。
 数据做好了剩下就成功了很多，剩下就是一些model，**自己dataset写什么，model forward就要用哪些输入**。这个一定要记住
 时间紧急，我们就魔改了一个Informer。细节不展示了
 
