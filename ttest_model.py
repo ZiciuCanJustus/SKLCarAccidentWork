@@ -8,6 +8,9 @@ import json
 import datetime
 import sys
 
+"""
+主要是为了线上测试algo类对不对写的函数，要把链路走通
+"""
 
 def construct_test_sample(sample, last_start, remain_length, predict_length):
 
